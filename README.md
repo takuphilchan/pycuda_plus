@@ -349,27 +349,14 @@ if __name__ == "__main__":
      execution_time = profiler.profile_kernel(kernel, grid, block, *args)
      print(f"Kernel execution time: {execution_time:.6f} seconds")
      ```
-## 7. **`NumpyHelper`**
-   - **Purpose**: Provide advanced utilities for integrating NumPy arrays with CUDA device memory using `pycuda_plus`.
-   - **Functions**:
-     - **`reshape_device_array(device_array, new_shape)`**: Reshape a device array into a new shape without changing its contents.
-     - **`generate_patterned_array(shape, pattern)`**: Generate patterned device arrays (e.g., `range`, `linspace`) for device-side operations.
-     - **`batch_copy_to_device(numpy_arrays)`**: Batch copy multiple NumPy arrays to device memory.
-     - **`batch_copy_to_host(device_arrays)`**: Batch copy multiple device arrays to host memory.
-   - **Example**:
-     ```python
-     numpy_helper = NumpyHelper()
-     d_patterned_array = numpy_helper.generate_patterned_array((1000,), 'range')
-     d_array1, d_array2 = numpy_helper.batch_copy_to_device([array1, array2])
-     result = numpy_helper.batch_copy_to_host([d_result])[0]
-     ```
 
 ### Utility Modules
 
-- **`numpy_support`**: Convert between NumPy arrays and GPU memory.
-- **`prebuilt_kernels`**: Access commonly used CUDA kernels.
+- **`numpy_support`**: Provides advanced utilities for integrating NumPy arrays with CUDA device memory.
+- **`prebuilt_kernels`**: Access to commonly used CUDA kernels.
 - **`grid_block`**: Helpers for calculating grid and block dimensions.
 - **`profiler`**: Tools for profiling CUDA kernel execution.
+- **`visualization`**: Tools for visualizing GPU memory usage, kernel performance, and grid/block configurations.
 
 ---
 
