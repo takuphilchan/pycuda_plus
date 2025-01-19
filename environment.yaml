@@ -1,0 +1,13 @@
+name: pycuda_plus
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.8
+  - pycuda
+  - numpy
+  - pytest
+  - sphinx
+  - platformdirs
+  - setuptools
+  - pip
