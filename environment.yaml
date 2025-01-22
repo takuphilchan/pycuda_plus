@@ -11,3 +11,4 @@ dependencies:
   - platformdirs
   - setuptools
   - pip
+  - six

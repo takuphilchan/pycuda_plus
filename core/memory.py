@@ -40,4 +40,16 @@ class MemoryManager:
     def allocate_array_like(self, host_array):
         """Allocate memory on the device that is the same shape and dtype as the host array."""
         return self.allocate_device_array(host_array.shape, host_array.dtype)
+    
+    def get_memory_info(self):
+        """
+        Retrieve the current GPU memory usage.
+        
+        Returns:
+            tuple: (total_memory, used_memory), both in bytes.
+        """
+        free_memory, total_memory = cuda.mem_get_info()
+        used_memory = total_memory - free_memory
+        print(f"GPU Memory Info - Total: {total_memory} bytes, Used: {used_memory} bytes")
+        return total_memory, used_memory
 
