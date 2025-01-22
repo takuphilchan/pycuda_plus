@@ -12,3 +12,6 @@ dependencies:
   - setuptools
   - pip
   - six
+  - matplotlib
+  - seaborn
+  - pandas
