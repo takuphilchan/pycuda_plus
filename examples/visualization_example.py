@@ -93,7 +93,7 @@ def compare_kernels(rows, cols):
 
         # Start real-time memory monitoring in a background thread
         # Monitor memory usage for the entire duration of kernel execution
-        real_time_memory_monitor(lambda: get_memory_usage(memory_manager), duration=30, interval=1)
+        real_time_memory_monitor(lambda: get_memory_usage(memory_manager), duration=10, interval=1)
 
         # Compile kernels
         add_kernel = kernel_executor.compile_kernel(matrix_addition_kernel, 'matrix_add')
