@@ -16,19 +16,26 @@
 
 ---
 
-## Installation
+## Installation for usage
 
 To install the `pycuda_plus` library, run:
 
 ```bash
 pip install pycuda_plus
 ```
+## Installations for contribution and improving the library
 
 Ensure you have the following prerequisites installed:
 - CUDA Toolkit
 - PyCUDA
 - Compatible NVIDIA GPU drivers
 
+Creating a virtual environment and installing the required libraries
+```bash
+git clone https://github.com/takuphilchan/pycuda_plus.git
+cd pycuda_plus
+conda env create -f environment.yaml
+```
 ---
 
 ## Getting Started
