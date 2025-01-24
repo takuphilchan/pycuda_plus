@@ -1,9 +1,9 @@
 import numpy as np
 from pycuda_plus.core.kernel import KernelExecutor
 from pycuda_plus.core.memory import MemoryManager
-from pycuda_plus.utils.prebuilt_kernels import get_kernel
-from pycuda_plus.core.error import CudaErrorChecker  # Using class-based error checking
-from pycuda_plus.core.context import CudaContextManager  # Using class-based context management
+from pycuda_plus.core.error import CudaErrorChecker
+from pycuda_plus.core.context import CudaContextManager
+from pycuda_plus.utils.prebuilt_kernels import get_prebuilt_kernels 
 
 def vector_addition_example(N):
     kernel = KernelExecutor()
@@ -12,11 +12,18 @@ def vector_addition_example(N):
     context_manager.initialize_context()
 
     try:
+        # Retrieve the vector_add kernel code from prebuilt kernels
+        prebuilt_kernels = get_prebuilt_kernels()
+        kernel_code = prebuilt_kernels['vector_add']
+        
+        # Compile the vector_add kernel
+        kernel.compile_kernel(kernel_code, 'vector_add')
+
         A = np.random.rand(N).astype(np.float32)
         B = np.random.rand(N).astype(np.float32)
         C = np.zeros(N, dtype=np.float32)
 
-        vector_add = get_kernel('vector_add')
+        vector_add = kernel.get_kernel('vector_add')
 
         # Allocate memory on the GPU
         d_A = memory_manager.allocate_device_array(A.shape, dtype=np.float32)

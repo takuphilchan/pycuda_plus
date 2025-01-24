@@ -1,7 +1,6 @@
 import numpy as np
 from pycuda_plus.core.kernel import KernelExecutor
 from pycuda_plus.core.memory import MemoryManager
-from pycuda_plus.utils.numpy_support import NumpyHelper
 from pycuda_plus.core.error import CudaErrorChecker  # Using class-based error checking
 from pycuda_plus.core.context import CudaContextManager  # Using class-based context management
 
@@ -18,7 +17,6 @@ __global__ void square_elements(float *a, float *b, int N) {
 def custom_kernel_example(N):
     kernel = KernelExecutor()
     memory = MemoryManager()
-    numpy_helper = NumpyHelper()
     # Initialize CUDA context
     context_manager = CudaContextManager()  # Using class-based context management
     context_manager.initialize_context()  # Using context from context.py
