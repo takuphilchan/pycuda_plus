@@ -40,16 +40,15 @@ conda env create -f environment.yaml
 
 ## Getting Started
 
-### Example 1: Vector Addition
+### Example 1: Vector Addition using prebuilt kernel
 
 ```python
 import numpy as np
 from pycuda_plus.core.kernel import KernelExecutor
 from pycuda_plus.core.memory import MemoryManager
-from pycuda_plus.utils.prebuilt_kernels import get_kernel
-from pycuda_plus.core.context import CudaContextManager
 from pycuda_plus.core.error import CudaErrorChecker
-
+from pycuda_plus.core.context import CudaContextManager
+from pycuda_plus.utils.prebuilt_kernels import get_prebuilt_kernels 
 
 def vector_addition_example(N):
     kernel = KernelExecutor()
@@ -58,11 +57,18 @@ def vector_addition_example(N):
     context_manager.initialize_context()
 
     try:
+        # Retrieve the vector_add kernel code from prebuilt kernels
+        prebuilt_kernels = get_prebuilt_kernels()
+        kernel_code = prebuilt_kernels['vector_add']
+        
+        # Compile the vector_add kernel
+        kernel.compile_kernel(kernel_code, 'vector_add')
+
         A = np.random.rand(N).astype(np.float32)
         B = np.random.rand(N).astype(np.float32)
         C = np.zeros(N, dtype=np.float32)
 
-        vector_add = get_kernel('vector_add')
+        vector_add = kernel.get_kernel('vector_add')
 
         # Allocate memory on the GPU
         d_A = memory_manager.allocate_device_array(A.shape, dtype=np.float32)
@@ -88,14 +94,16 @@ def vector_addition_example(N):
     finally:
         context_manager.finalize_context()
 
-
 if __name__ == "__main__":
-    N = 1000000
+    N = 1000000  # Size of the vectors
     result = vector_addition_example(N)
-    print(f"Vector addition result (first 5 elements): {result[:5]}")
+    if result is not None:
+        print(f"Vector addition result (first 5 elements):\n{result[:5]}")
+    else:
+        print("Error in vector addition.")
 ```
 
-### Example 2: Matrix Multiplication
+### Example 2: Matrix Multiplication using custom kernel
 
 ```python
 import numpy as np
@@ -172,7 +180,7 @@ if __name__ == "__main__":
     print(f"Matrix multiplication result (first 5x5 elements):\n{result[:5, :5]}")
 ```
 
-### Example 3: Matrix Addition with Profiling
+### Example 3: Matrix Addition with Profiling using custom kernel
 
 ```python
 import numpy as np
