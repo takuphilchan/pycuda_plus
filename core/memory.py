@@ -8,12 +8,15 @@ class MemoryManager:
     def __init__(self, dtype=np.float32):
         """Initialize the MemoryManager with a default data type."""
         self.dtype = np.dtype(dtype)
+        self.device_metadata = {}
 
     def allocate_device_array(self, shape, dtype=None):
         """Allocate memory on the GPU for an array."""
         dtype = np.dtype(dtype if dtype is not None else self.dtype)
         size = int(np.prod(shape) * dtype.itemsize)
         device_array = cuda.mem_alloc(size)
+        # Store shape and dtype metadata for this device array
+        self.device_metadata[device_array] = {'shape': shape, 'dtype': dtype}
         return device_array
 
     def copy_to_device(self, host_array, device_array):
@@ -27,6 +30,9 @@ class MemoryManager:
     def deallocate(self, device_array):
         """Deallocate memory on the GPU."""
         device_array.free()
+        # Remove metadata when the device array is deallocated
+        if device_array in self.device_metadata:
+            del self.device_metadata[device_array]
 
     def get_memory_info(self):
         """
@@ -73,3 +79,18 @@ class MemoryManager:
     def cupy_to_numpy(self, cp_array):
         """Convert CuPy array to NumPy array."""
         return cp_array.get()
+
+    # Helper functions to get shape and dtype of a device array
+    def get_shape(self, device_array):
+        """Get the shape of a device array."""
+        if device_array in self.device_metadata:
+            return self.device_metadata[device_array]['shape']
+        else:
+            raise ValueError("Device array not found in metadata.")
+
+    def get_dtype(self, device_array):
+        """Get the dtype of a device array."""
+        if device_array in self.device_metadata:
+            return self.device_metadata[device_array]['dtype']
+        else:
+            raise ValueError("Device array not found in metadata.")
