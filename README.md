@@ -16,6 +16,95 @@
 
 ---
 
+## Prerequisites: NVIDIA CUDA Toolkit Installation
+
+To use PyCUDA Plus, ensure the NVIDIA CUDA Toolkit is installed on your system. Follow these steps:
+
+1. **Verify Your NVIDIA GPU Compatibility**  
+   Check your GPU model's compatibility with CUDA [here](https://developer.nvidia.com/cuda-gpus).
+
+2. **Download the CUDA Toolkit**  
+   Visit the [CUDA Toolkit download page](https://developer.nvidia.com/cuda-downloads) and download the version compatible with your GPU and operating system.
+
+3. **Install the Toolkit**  
+   - Follow the installation guide for your platform:
+     - **Linux:** [Linux Installation Guide](https://docs.nvidia.com/cuda/cuda-installation-guide-linux/index.html)
+     - **Windows:** [Windows Installation Guide](https://docs.nvidia.com/cuda/cuda-installation-guide-microsoft-windows/index.html)
+
+4. **Set Environment Variables**  
+   After installation, ensure the CUDA Toolkit is added to your environment variables:
+   - On **Linux**:
+     ```bash
+     export PATH="/usr/local/cuda/bin:$PATH"
+     export LD_LIBRARY_PATH="/usr/local/cuda/lib64:$LD_LIBRARY_PATH"
+     ```
+     Add these lines to your shell configuration file (`~/.bashrc`, `~/.zshrc`, etc.) for persistent access.
+   - On **Windows**:
+     Add the following paths to your `Environment Variables`:
+     - `C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\<Your_Version>\bin`
+     - `C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\<Your_Version>\libnvvp`
+
+5. **Verify Installation**  
+   After installation, verify the CUDA Toolkit is working correctly:
+   ```bash
+   nvcc --version
+   ```
+
+# Prerequisites: g++ Installation for CUDA 12.x
+
+To compile CUDA programs and ensure compatibility with PyCUDA Plus, you need to install **g++ 11 or later**. The following instructions guide you through installing and setting up **g++ 11** on your system.
+
+## Steps to Install g++ 11 or Later on Linux
+
+### 1. Add the Toolchain Repository
+Add the required repository to access newer versions of `g++`:
+```bash
+sudo add-apt-repository ppa:ubuntu-toolchain-r/test
+sudo apt-get update
+```
+
+### 2. Install g++ 11
+Install the `g++` version that is compatible with CUDA 12.x or later:
+```bash
+sudo apt-get install g++-11 gcc-11
+```
+
+### 3. Update the Default gcc and g++ Versions
+Use `update-alternatives` to switch between different versions of `g++`:
+```bash
+sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-9 10
+sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 20
+sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-9 10
+sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-11 20
+```
+
+### 4. Select the Default g++ Version
+Select `g++-11` as the default version:
+```bash
+sudo update-alternatives --config gcc
+sudo update-alternatives --config g++
+```
+Follow the prompts to choose `gcc-11` and `g++-11`.
+
+### 5. Verify the Installation
+Once you've selected the default version, verify the installation by checking the `g++` version:
+```bash
+g++ --version
+```
+It should show `g++` version 11 or later.
+
+---
+
+## Troubleshooting
+
+If you run into issues or the version doesn't update correctly, ensure that your system is correctly pointing to the newly installed `g++` version by running:
+```bash
+which g++
+```
+This should return the path to `g++-11`.
+
+---
+
 ## Installation for usage
 
 To install the `pycuda_plus` library, run:
