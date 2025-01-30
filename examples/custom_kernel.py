@@ -25,16 +25,20 @@ def custom_kernel_example(N):
         # Generate random vector
         A = np.random.rand(N).astype(np.float32)
         B = np.zeros(N, dtype=np.float32)
+        print("✅ Success: Random vector A generated.")
 
         # Compile the kernel
         square_elements = kernel.compile_kernel(custom_kernel_code, 'square_elements')
+        print("✅ Success: Kernel compiled.")
 
         # Allocate device memory
         d_A = memory.allocate_device_array(A.shape, dtype=np.float32)
         d_B = memory.allocate_device_array(B.shape, dtype=np.float32)
+        print("✅ Success: Device memory allocated.")
 
         # Copy data to device
         memory.copy_to_device(A, d_A)
+        print("✅ Success: Data copied to device.")
 
         # Configure grid and block dimensions
         block_size = 256
@@ -46,10 +50,12 @@ def custom_kernel_example(N):
         
         # Launch the kernel
         kernel.launch_kernel(square_elements, grid, block, d_A, d_B, np.int32(N))
+        print("✅ Success: Kernel launched.")
 
         # Synchronize and check for errors using CudaErrorChecker
         error_checker = CudaErrorChecker()
         error_checker.check_errors()
+        print("✅ Success: No errors detected.")
 
         # Copy the result back to the host
         memory.copy_to_host(d_B, B)
@@ -58,8 +64,9 @@ def custom_kernel_example(N):
     finally:
         # Finalize CUDA context
         context_manager.finalize_context()  # Clean up context after computation
+        print("✅ Success: CUDA context finalized.")
 
 if __name__ == "__main__":
     N = 1000000  # Size of the vector
     result = custom_kernel_example(N)
-    print(f"Custom kernel result (first 5 elements):\n{result[:5]}")
+    print(f"✅ Success: Custom kernel result (first 5 elements):\n{result[:5]}")

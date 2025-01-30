@@ -1,216 +1,375 @@
-import matplotlib.pyplot as plt
+
+import dash
 import numpy as np
-from typing import List, Dict
-import seaborn as sns
-import pandas as pd
+import socket
+import plotly.graph_objs as go
+from dash import dcc, html
+from dash.dependencies import Input, Output
+from pycuda_plus.utils.monitor import start_memory_monitoring, memory_data, data_lock
+from pycuda_plus.core.context import CudaContextManager
 
-# Define a consistent color palette with slightly more contrast
-COLORS = {
-    'primary': '#3498db',      # Slightly more saturated soft blue
-    'secondary': '#e74c3c',    # Original soft red moved to secondary
-    'accent': '#2c3e50',       # Dark slate (unchanged)
-    'highlight': '#27ae60',    # Soft green for additional contrast
-    'background': '#ecf0f1'    # Light gray (unchanged)
-}
 
-def plot_memory_usage(total_memory: int, used_memory: int, colors: List[str] = None):
-    """
-    Visualize GPU memory usage as a pie chart with enhanced aesthetics.
-    """
-    if colors is None:
-        colors = [COLORS['secondary'], COLORS['primary']]  # Red for used, blue for free
-        
-    if total_memory <= 0 or used_memory < 0:
-        raise ValueError("Total memory must be positive, and used memory must be non-negative.")
+class GpuDashboard:
+    # Modern color palette
+    COLORS = {
+        'background': '#f8fafc',
+        'card': '#ffffff',
+        'primary': '#3b82f6',
+        'secondary': '#64748b',
+        'accent': '#f43f5e',
+        'success': '#22c55e',
+        'text': '#1e293b',
+        'lightText': '#64748b'
+    }
     
-    free_memory = total_memory - used_memory
-    if free_memory < 0:
-        raise ValueError("Used memory cannot exceed total memory.")
-    
-    labels = ['Used Memory', 'Free Memory']
-    sizes = [used_memory, free_memory]
-    
-    plt.figure(figsize=(7, 7), facecolor='white')
-    wedges, texts, autotexts = plt.pie(
-        sizes, 
-        labels=labels, 
-        colors=colors, 
-        autopct='%1.1f%%', 
-        startangle=90, 
-        wedgeprops={'edgecolor': 'white', 'linewidth': 2}
-    )
-    
-    # Enhance text appearance
-    plt.setp(autotexts, color=COLORS['accent'], fontsize=12, weight='bold')
-    plt.setp(texts, color=COLORS['accent'], fontsize=12, weight='bold')
-    
-    plt.axis('equal')
-    plt.title('GPU Memory Usage', fontsize=16, weight='bold', color=COLORS['accent'], pad=20)
-    plt.show()
+    CHART_COLORS = ['#3b82f6', '#f43f5e', '#22c55e', '#eab308', '#a855f7']
 
-def real_time_memory_monitor(get_memory_usage_func, duration: int = 10, interval: float = 0.5):
-    """
-    Monitor GPU memory usage in real-time with improved aesthetics.
-    """
-    import time
-    
-    if duration <= 0 or interval <= 0:
-        raise ValueError("Duration and interval must be positive.")
-    
-    plt.style.use('seaborn')
-    
-    # Create figure once, outside the loop
-    fig = plt.figure(figsize=(8, 6), facecolor='white')
-    
-    total_memory, used_memory = get_memory_usage_func()
-    timestamps = []
-    used_memories = []
-    free_memories = []
-    
-    start_time = time.time()
-    while time.time() - start_time < duration:
-        total_memory, used_memory = get_memory_usage_func()
-        free_memory = total_memory - used_memory
-        
-        timestamps.append(time.time() - start_time)
-        used_memories.append(used_memory)
-        free_memories.append(free_memory)
-        
-        plt.clf()
-        
-        # Plot with more contrasting colors
-        plt.plot(timestamps, used_memories, 
-                label='Used Memory', 
-                color=COLORS['secondary'],  # Red for used memory
-                linestyle='-', 
-                marker='o', 
-                markersize=6,
-                markeredgecolor='white',
-                markeredgewidth=1,
-                linewidth=2)
-        
-        plt.plot(timestamps, free_memories, 
-                label='Free Memory', 
-                color=COLORS['primary'],  # Blue for free memory
-                linestyle='-', 
-                marker='s', 
-                markersize=6,
-                markeredgecolor='white',
-                markeredgewidth=1,
-                linewidth=2)
-        
-        plt.xlabel('Time (s)', fontsize=12, weight='bold', color=COLORS['accent'])
-        plt.ylabel('Memory (Bytes)', fontsize=12, weight='bold', color=COLORS['accent'])
-        plt.title('Real-Time GPU Memory Usage', fontsize=14, weight='bold', color=COLORS['accent'])
-        
-        # Enhanced legend
-        legend = plt.legend(loc='upper right', fontsize=10, framealpha=0.9,
-                          edgecolor=COLORS['accent'])
-        legend.get_frame().set_facecolor('white')
-        
-        plt.grid(True, which='both', linestyle='--', alpha=0.3, color=COLORS['accent'])
-        plt.tick_params(colors=COLORS['accent'])
-        
-        plt.tight_layout()
-        plt.pause(interval)
-    
-    plt.show()
-
-def plot_execution_times(execution_times):
-    """
-    Visualize execution times for multiple kernels or operations with improved aesthetics.
-    """
-    # Set custom style to match real-time plot
-    plt.style.use('seaborn')  # This gives us the background grid
-    plt.rcParams['figure.facecolor'] = 'white'
-    plt.rcParams['axes.facecolor'] = COLORS['background']  # Light gray background
-
-    data = []
-    for kernel, times in execution_times.items():
-        for time in times:
-            data.append({'Kernel': kernel, 'Execution Time (ms)': time})
-
-    df = pd.DataFrame(data)
-    aggregated_data = (
-        df.groupby('Kernel')['Execution Time (ms)']
-        .agg(['mean', 'std'])
-        .reset_index()
-        .rename(columns={'mean': 'Mean Time', 'std': 'Std Dev'})
-    )
-
-    plt.figure(figsize=(8, 7))
-
-    # Create custom palette using our colors
-    base_colors = [
-        COLORS['primary'],      # Soft blue
-        COLORS['secondary'],    # Soft red
-        COLORS['highlight'],    # Soft green
-    ]
-    
-    # Generate additional shades if needed
-    n_colors = len(aggregated_data)
-    if n_colors > len(base_colors):
-        custom_palette = sns.color_palette([COLORS['primary']], n_colors=n_colors)
-    else:
-        custom_palette = base_colors[:n_colors]
-
-    # Create the background style
-    ax = plt.gca()
-    ax.set_facecolor(COLORS['background'])  # Set background color
-    ax.spines['top'].set_visible(False)     # Remove top border
-    ax.spines['right'].set_visible(False)   # Remove right border
-    
-    sns.barplot(
-        data=aggregated_data,
-        x='Kernel',
-        y='Mean Time',
-        hue='Kernel',
-        legend=False,
-        palette=custom_palette,
-        errorbar=None,
-    )
-
-    # Add error bars
-    for i, row in aggregated_data.iterrows():
-        plt.errorbar(
-            x=i, 
-            y=row['Mean Time'], 
-            yerr=row['Std Dev'], 
-            fmt='none', 
-            ecolor=COLORS['accent'], 
-            capsize=5, 
-            alpha=0.5
+    def __init__(self, kernel_comparator, rows, cols):
+        """Initialize the GPU Dashboard."""
+        self.kernel_comparator = kernel_comparator
+        self.rows = rows
+        self.cols = cols
+        self.app = dash.Dash(
+            __name__, 
+            suppress_callback_exceptions=True,
+            meta_tags=[
+                {"name": "viewport", "content": "width=device-width, initial-scale=1"}
+            ]
         )
 
-    plt.title('Kernel Execution Times', fontsize=16, weight='bold', color=COLORS['accent'], pad=20)
-    plt.xlabel('Kernel/Operation', fontsize=12, weight='bold', color=COLORS['accent'], labelpad=10)
-    plt.ylabel('Mean Execution Time (ms)', fontsize=12, weight='bold', color=COLORS['accent'], labelpad=10)
-    
-    plt.xticks(fontsize=10, rotation=0, ha='center', color=COLORS['accent'])
-    plt.yticks(fontsize=10, color=COLORS['accent'])
-    
-    # Enhance grid style: Show only horizontal grid lines
-    plt.grid(True, axis='y', linestyle='--', alpha=0.3, color=COLORS['accent'])
+        if not hasattr(GpuDashboard, 'memory_monitoring_started'):
+            start_memory_monitoring()
+            GpuDashboard.memory_monitoring_started = True
 
-    # Add data labels
-    for i, row in aggregated_data.iterrows():
-        value = row['Mean Time']
-        if value < 0.01:
-            format_str = f"{value:.6f}"
-        elif value < 0.1:
-            format_str = f"{value:.4f}"
-        else:
-            format_str = f"{value:.3f}"
-            
-        plt.text(
-            x=i, 
-            y=row['Mean Time'] + row['Std Dev'] + (row['Mean Time'] * 0.02),
-            s=f"{format_str} ms", 
-            ha='center', 
-            fontsize=9,
-            color=COLORS['accent'],
-            weight='bold'
+        self.layout = self.create_layout()
+        self.app.layout = self.layout
+        self.setup_callbacks()
+
+    def create_card(self, children, width='100%'):
+        """Create a styled card component."""
+        return html.Div(
+            children,
+            style={
+                'backgroundColor': self.COLORS['card'],
+                'padding': '20px',
+                'borderRadius': '8px',
+                'boxShadow': '0 1px 3px 0 rgb(0 0 0 / 0.1)',
+                'width': width,
+                'margin': '10px'
+            }
         )
 
-    plt.tight_layout(rect=[0, 0.05, 1, 0.95])
-    plt.show()
+    def create_layout(self):
+        """Define the layout of the dashboard."""
+        return html.Div(style={
+            'backgroundColor': self.COLORS['background'],
+            'minHeight': '100vh',
+            'padding': '20px'
+        }, children=[
+            # Header
+            html.Div(style={
+                'textAlign': 'center',
+                'marginBottom': '30px',
+                'padding': '20px',
+                'backgroundColor': self.COLORS['card'],
+                'borderRadius': '8px',
+                'boxShadow': '0 1px 3px 0 rgb(0 0 0 / 0.1)'
+            }, children=[
+                html.H1('GPU Utilization Dashboard', style={
+                    'color': self.COLORS['text'],
+                    'fontSize': '2.25rem',
+                    'fontWeight': '600',
+                    'margin': '0'
+                }),
+                html.P('Real-time monitoring and performance analysis', style={
+                    'color': self.COLORS['lightText'],
+                    'margin': '10px 0 0 0'
+                })
+            ]),
+
+            # Memory Usage Section
+            html.Div(style={
+                'display': 'flex',
+                'flexWrap': 'wrap',
+                'justifyContent': 'space-between',
+                'marginBottom': '20px'
+            }, children=[
+                self.create_card([
+                    html.H3('Memory Distribution', style={
+                        'color': self.COLORS['text'],
+                        'marginTop': '0'
+                    }),
+                    dcc.Graph(id='memory-usage-pie-chart')
+                ], width='30%'),
+                
+                self.create_card([
+                    html.H3('Memory Usage Over Time', style={
+                        'color': self.COLORS['text'],
+                        'marginTop': '0'
+                    }),
+                    dcc.Graph(id='real-time-memory-usage')
+                ], width='55%')
+            ]),
+
+            # Kernel Execution Times Section
+            self.create_card([
+                html.H3('Kernel Performance Analysis', style={
+                    'color': self.COLORS['text'],
+                    'marginTop': '0'
+                }),
+                dcc.Graph(id='kernel-execution-times'),
+                
+                # Controls
+                html.Div(style={
+                    'display': 'flex',
+                    'justifyContent': 'center',
+                    'alignItems': 'center',
+                    'marginTop': '20px',
+                    'gap': '20px'
+                }, children=[
+                    html.Div([
+                        html.Label("Rows", style={
+                            'color': self.COLORS['text'],
+                            'marginRight': '10px',
+                            'fontWeight': '500'
+                        }),
+                        dcc.Input(
+                            id="rows-input",
+                            type="number",
+                            value=self.rows,
+                            style={
+                                'padding': '8px',
+                                'borderRadius': '4px',
+                                'border': f'1px solid {self.COLORS["secondary"]}',
+                                'width': '100px'
+                            }
+                        )
+                    ]),
+                    html.Div([
+                        html.Label("Columns", style={
+                            'color': self.COLORS['text'],
+                            'marginRight': '10px',
+                            'fontWeight': '500'
+                        }),
+                        dcc.Input(
+                            id="cols-input",
+                            type="number",
+                            value=self.cols,
+                            style={
+                                'padding': '8px',
+                                'borderRadius': '4px',
+                                'border': f'1px solid {self.COLORS["secondary"]}',
+                                'width': '100px'
+                            }
+                        )
+                    ])
+                ])
+            ]),
+
+            dcc.Interval(id='interval-component', interval=2000, n_intervals=0)
+        ])
+
+    def plot_kernel_execution_times(self, execution_times):
+        """Plot the kernel execution times with improved styling."""
+        if not execution_times:
+            return {'data': [], 'layout': go.Layout(title='No Data Available')}
+
+        traces = []
+        for i, (operation, times) in enumerate(execution_times.items()):
+            traces.append(
+                go.Bar(
+                    x=[f"Run {j+1}" for j in range(min(10, len(times)))],
+                    y=times[:10],
+                    name=operation,
+                    marker=dict(color=self.CHART_COLORS[i % len(self.CHART_COLORS)])
+                )
+            )
+
+        layout = go.Layout(
+            title=None,  # Title is handled by the card
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)',
+            font=dict(color=self.COLORS['text']),
+            barmode='group',
+            xaxis=dict(
+                title='Run Number',
+                gridcolor=self.COLORS['secondary'],
+                gridwidth=0.1,
+                showline=True,
+                linecolor=self.COLORS['secondary']
+            ),
+            yaxis=dict(
+                title='Execution Time (s)',
+                gridcolor=self.COLORS['secondary'],
+                gridwidth=0.1,
+                showline=True,
+                linecolor=self.COLORS['secondary']
+            ),
+            legend=dict(
+                bgcolor='rgba(0,0,0,0)',
+                bordercolor='rgba(0,0,0,0)'
+            )
+        )
+
+        return {'data': traces, 'layout': layout}
+
+    def plot_memory_usage(self, used_memory, free_memory):
+        """Generate a modernized memory usage pie chart."""
+        return {
+            'data': [go.Pie(
+                labels=['Used Memory', 'Free Memory'],
+                values=[used_memory, free_memory],
+                hole=0.7,
+                marker=dict(colors=[self.COLORS['accent'], self.COLORS['primary']]),
+                textinfo='label+percent',
+                textposition='outside',
+                textfont=dict(color=self.COLORS['text'])
+            )],
+            'layout': go.Layout(
+                paper_bgcolor='rgba(0,0,0,0)',
+                showlegend=False,
+                margin=dict(t=50, b=50, l=10, r=10),
+                height=400
+            )
+        }
+
+    def plot_real_time_memory_usage(self, timestamps, used_memory, free_memory):
+        """Generate a modernized real-time memory usage chart."""
+        return {
+            'data': [
+                go.Scatter(
+                    x=timestamps,
+                    y=used_memory,
+                    mode='lines',
+                    name='Used Memory',
+                    line=dict(color=self.COLORS['accent'], width=2),
+                    fill='tozeroy',
+                    fillcolor=f'rgba{tuple(int(self.COLORS["accent"][1:][i:i+2], 16) for i in (0, 2, 4)) + (0.1,)}'
+                ),
+                go.Scatter(
+                    x=timestamps,
+                    y=free_memory,
+                    mode='lines',
+                    name='Free Memory',
+                    line=dict(color=self.COLORS['primary'], width=2),
+                    fill='tozeroy',
+                    fillcolor=f'rgba{tuple(int(self.COLORS["primary"][1:][i:i+2], 16) for i in (0, 2, 4)) + (0.1,)}'
+                )
+            ],
+            'layout': go.Layout(
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)',
+                font=dict(color=self.COLORS['text']),
+                xaxis=dict(
+                    title='Time (s)',
+                    showgrid=True,
+                    gridcolor=self.COLORS['secondary'],
+                    gridwidth=0.1,
+                    showline=True,
+                    linecolor=self.COLORS['secondary']
+                ),
+                yaxis=dict(
+                    title='Memory Usage (bytes)',
+                    showgrid=True,
+                    gridcolor=self.COLORS['secondary'],
+                    gridwidth=0.1,
+                    showline=True,
+                    linecolor=self.COLORS['secondary']
+                ),
+                legend=dict(
+                    bgcolor='rgba(0,0,0,0)',
+                    bordercolor='rgba(0,0,0,0)'
+                ),
+                margin=dict(l=50, r=20, t=20, b=50)
+            )
+        }
+
+    def setup_callbacks(self):
+        """Setup callbacks for updating the graphs."""
+        self.app.callback(
+            Output('kernel-execution-times', 'figure'),
+            [Input('interval-component', 'n_intervals'), Input('rows-input', 'value'), Input('cols-input', 'value')]
+        )(self.update_kernel_execution_times)
+
+        self.app.callback(
+            Output('memory-usage-pie-chart', 'figure'),
+            Input('interval-component', 'n_intervals')
+        )(self.update_memory_usage)
+
+        self.app.callback(
+            Output('real-time-memory-usage', 'figure'),
+            Input('interval-component', 'n_intervals')
+        )(self.update_real_time_memory_usage)
+    
+    def update_kernel_execution_times(self, n_intervals, rows, cols):
+        """Update the kernel execution times graph with multiple runs."""
+        print(f"Running kernel comparison for Rows: {rows}, Cols: {cols}")
+
+        if not rows or not cols or rows <= 0 or cols <= 0:
+            return {'data': [], 'layout': go.Layout(title="Invalid Input Data")}
+
+        try:
+            execution_times = {}
+            with CudaContextManager() as _:
+                for _ in range(5):  # Run the kernels 5 times
+                    run_times = self.kernel_comparator.compare_kernels(rows, cols)
+
+                    # Accumulate execution times
+                    for key, times in run_times.items():
+                        if key not in execution_times:
+                            execution_times[key] = []
+                        execution_times[key].extend(times)  # Add multiple runs
+
+            if not execution_times or not isinstance(execution_times, dict):
+                return {'data': [], 'layout': go.Layout(title="No Execution Data Available")}
+
+            return self.plot_kernel_execution_times(execution_times)
+
+        except Exception as e:
+            print(f"Error updating kernel execution times: {e}")
+            return {'data': [], 'layout': go.Layout(title="Error Plotting Data")}
+
+    def update_memory_usage(self, n_intervals):
+        """Update the memory usage pie chart."""
+        with data_lock:
+            used_memory = memory_data.get('used_memory', [0])[-1]
+            free_memory = memory_data.get('free_memory', [0])[-1]
+
+        return self.plot_memory_usage(used_memory, free_memory)
+
+    def update_real_time_memory_usage(self, n_intervals):
+        """Update the real-time memory usage graph."""
+        with data_lock:
+            timestamps = memory_data.get('timestamps', [])[-100:]
+            used_memory = memory_data.get('used_memory', [])[-100:]
+            free_memory = memory_data.get('free_memory', [])[-100:]
+
+        if not timestamps:
+            return {}
+
+        return self.plot_real_time_memory_usage(timestamps, used_memory, free_memory)
+
+    def find_available_port(self, start_port=8000, end_port=9000):
+        """Find an available port within the specified range."""
+        for port in range(start_port, end_port + 1):
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                if s.connect_ex(('localhost', port)) != 0:
+                    return port
+        raise Exception(f"No available ports found in range {start_port}-{end_port}.")
+
+    def run(self):
+        """Run the Dash app on an available port."""
+        try:
+            available_port = self.find_available_port()
+            print(f"Running the Dash app on port {available_port}...")
+            self.app.run_server(debug=True, port=available_port, use_reloader=False)
+        except Exception as e:
+            print(f"Error: {e}")
+
+def plot_execution_times(kernel_comparator, rows, cols):
+    """Helper function to start the GPU dashboard."""
+    if not hasattr(kernel_comparator, 'compare_kernels'):
+        print("Error: kernel_comparator is missing 'compare_kernels' method.")
+        return
+
+    GpuDashboard(kernel_comparator, rows=rows, cols=cols).run()

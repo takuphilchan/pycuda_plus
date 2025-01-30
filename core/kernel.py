@@ -24,10 +24,15 @@ class KernelExecutor:
         Returns:
             Compiled CUDA kernel function
         """
-        module = compiler.SourceModule(kernel_code)
-        kernel = module.get_function(kernel_name)
-        self.compiled_kernels[kernel_name] = kernel
-        return kernel
+        try:
+            module = compiler.SourceModule(kernel_code)
+            kernel = module.get_function(kernel_name)
+            self.compiled_kernels[kernel_name] = kernel
+            print(f"✅ Successfully compiled {kernel_name}")
+            return kernel
+        except Exception as e:
+            print(f"❌ Kernel compilation failed for {kernel_name}: {e}")
+            return None
 
     def get_kernel(self, kernel_name):
         """
@@ -53,4 +58,25 @@ class KernelExecutor:
             block (tuple): Block dimension configuration
             *args: Kernel arguments
         """
-        kernel(*args, grid=grid, block=block)
+        try:
+            if kernel is None:
+                raise ValueError("❌ Kernel is None. Ensure it is compiled successfully.")
+
+            # ✅ Ensure CUDA context is active
+            if not cuda.Context.get_current():
+                raise RuntimeError("❌ CUDA context is not active! Ensure initialization.")
+
+            # ✅ Ensure valid arguments
+            for i, arg in enumerate(args):
+                if arg is None:
+                    raise ValueError(f"❌ Kernel argument at index {i} is None.")
+
+            # ✅ Launch the kernel with correct argument order
+            kernel(*args, block=block, grid=grid)
+
+        except cuda.LogicError as e:
+            print(f"❌ CUDA LogicError in launching kernel {str(kernel)}: {e}")
+        except RuntimeError as e:
+            print(f"❌ CUDA Runtime Error: {e}")
+        except Exception as e:
+            print(f"❌ Unexpected error in launching kernel {str(kernel)}: {e}")

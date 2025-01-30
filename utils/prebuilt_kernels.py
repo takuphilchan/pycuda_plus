@@ -1,56 +1,76 @@
 kernels = {
     # General Kernels
-    "vector_add": """__global__ void vector_add(float *a, float *b, float *c, int n) {
-        int idx = threadIdx.x + blockIdx.x * blockDim.x;
-        if (idx < n) {
-            c[idx] = a[idx] + b[idx];
-        }
+    "vector_add": """__global__ void vector_add(const float *a, const float *b, float *c, int n) {
+        int idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx < n) c[idx] = a[idx] + b[idx];
     }""",
     
-    "vector_scale": """__global__ void vector_scale(float *a, float *b, float scalar, int n) {
-        int idx = threadIdx.x + blockIdx.x * blockDim.x;
-        if (idx < n) {
-            b[idx] = a[idx] * scalar;
-        }
+    "vector_scale": """__global__ void vector_scale(const float *a, float *b, float scalar, int n) {
+        int idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx < n) b[idx] = a[idx] * scalar;
     }""",
     
-    "matrix_multiply": """__global__ void matrix_multiply(float *a, float *b, float *c, int M, int N, int K) {
-        int row = blockIdx.y * blockDim.y + threadIdx.y;
-        int col = blockIdx.x * blockDim.x + threadIdx.x;
+    "matrix_multiply": """__global__ void matrix_multiply(const float *a, const float *b, float *c, int M, int N, int K) {
+        __shared__ float Asub[16][16];
+        __shared__ float Bsub[16][16];
         
-        if (row < M && col < K) {
-            float sum = 0.0f;
-            for (int i = 0; i < N; i++) {
-                sum += a[row * N + i] * b[i * K + col];
-            }
-            c[row * K + col] = sum;
+        int tx = threadIdx.x, ty = threadIdx.y;
+        int row = blockIdx.y * blockDim.y + ty;
+        int col = blockIdx.x * blockDim.x + tx;
+        
+        float sum = 0.0f;
+        for (int t = 0; t < (N + 15) / 16; ++t) {
+            if (row < M && t * 16 + tx < N)
+                Asub[ty][tx] = a[row * N + t * 16 + tx];
+            else
+                Asub[ty][tx] = 0.0f;
+            
+            if (col < K && t * 16 + ty < N)
+                Bsub[ty][tx] = b[(t * 16 + ty) * K + col];
+            else
+                Bsub[ty][tx] = 0.0f;
+            
+            __syncthreads();
+            for (int k = 0; k < 16; ++k)
+                sum += Asub[ty][k] * Bsub[k][tx];
+            __syncthreads();
         }
+        
+        if (row < M && col < K)
+            c[row * K + col] = sum;
     }""",
     
-    "matrix_transpose": """__global__ void matrix_transpose(float *input, float *output, int rows, int cols) {
-        int x = blockIdx.x * blockDim.x + threadIdx.x;
-        int y = blockIdx.y * blockDim.y + threadIdx.y;
-        if (x < cols && y < rows) {
-            output[x * rows + y] = input[y * cols + x];
-        }
+    "matrix_add": """__global__ void matrix_add(const float *A, const float *B, float *C, int rows, int cols) {
+        int idx = blockIdx.x * blockDim.x + threadIdx.x;
+        int idy = blockIdx.y * blockDim.y + threadIdx.y;
+        int index = idy * cols + idx;
+        if (idx < cols && idy < rows) C[index] = A[index] + B[index];
     }""",
-
-    "dot_product": """__global__ void dot_product(float *a, float *b, float *result, int n) {
+    
+    "matrix_transpose": """__global__ void matrix_transpose(const float *input, float *output, int rows, int cols) {
+        __shared__ float tile[16][16 + 1];
+        int x = blockIdx.x * 16 + threadIdx.x;
+        int y = blockIdx.y * 16 + threadIdx.y;
+        if (x < cols && y < rows) tile[threadIdx.y][threadIdx.x] = input[y * cols + x];
+        __syncthreads();
+        x = blockIdx.y * 16 + threadIdx.x;
+        y = blockIdx.x * 16 + threadIdx.y;
+        if (x < rows && y < cols) output[y * rows + x] = tile[threadIdx.x][threadIdx.y];
+    }""",
+    
+    "dot_product": """__global__ void dot_product(const float *a, const float *b, float *result, int n) {
         __shared__ float partial_sum[256];
         int tid = threadIdx.x;
-        int idx = blockIdx.x * blockDim.x + threadIdx.x;
+        int idx = blockIdx.x * blockDim.x + tid;
         partial_sum[tid] = (idx < n) ? a[idx] * b[idx] : 0.0f;
         __syncthreads();
         
         for (unsigned int s = blockDim.x / 2; s > 0; s >>= 1) {
-            if (tid < s) {
-                partial_sum[tid] += partial_sum[tid + s];
-            }
+            if (tid < s) partial_sum[tid] += partial_sum[tid + s];
             __syncthreads();
         }
         if (tid == 0) atomicAdd(result, partial_sum[0]);
     }""",
-    
     # Reduction Kernels
     "array_reduction_sum": """__global__ void array_reduction_sum(float *input, float *output, int n) {
         __shared__ float sdata[256];
@@ -162,44 +182,30 @@ kernels = {
         }
     }""",
     # Optimizer
-    "adam_optimizer": """__global__ void adam_optimizer(float *weights, float *gradients, float *m, float *v, 
+    "adam_optimizer": """__global__ void adam_optimizer(float *weights, const float *gradients, float *m, float *v, 
                                      float learning_rate, float beta1, float beta2, 
                                      float epsilon, int t, int n) {
-        int idx = threadIdx.x + blockIdx.x * blockDim.x;
+        int idx = blockIdx.x * blockDim.x + threadIdx.x;
         if (idx < n) {
-            // Update biased first moment estimate
-            m[idx] = beta1 * m[idx] + (1.0f - beta1) * gradients[idx];
-            // Update biased second raw moment estimate
-            v[idx] = beta2 * v[idx] + (1.0f - beta2) * gradients[idx] * gradients[idx];
-            
-            // Compute bias-corrected first moment estimate
-            float m_hat = m[idx] / (1.0f - powf(beta1, t));
-            // Compute bias-corrected second raw moment estimate
-            float v_hat = v[idx] / (1.0f - powf(beta2, t));
-            
-            // Update weights
+            float g = gradients[idx];
+            float m_hat = (m[idx] = beta1 * m[idx] + (1.0f - beta1) * g) / (1.0f - powf(beta1, t));
+            float v_hat = (v[idx] = beta2 * v[idx] + (1.0f - beta2) * g * g) / (1.0f - powf(beta2, t));
             weights[idx] -= learning_rate * m_hat / (sqrtf(v_hat) + epsilon);
         }
     }""",
-    
     # Image Processing Kernels
-    "rgb_to_grayscale": """__global__ void rgb_to_grayscale(float *d_input, float *d_output, int height, int width) {
-    int x = blockIdx.x * blockDim.x + threadIdx.x;
-    int y = blockIdx.y * blockDim.y + threadIdx.y;
-    if (x < width && y < height) {
-        int idx = y * width + x;
-        float r = d_input[3 * idx];
-        float g = d_input[3 * idx + 1];
-        float b = d_input[3 * idx + 2];
-        d_output[idx] = 0.2989f * r + 0.5870f * g + 0.1140f * b;
-        }
-    }
-    """,
-        
-    "gaussian_blur": """__global__ void gaussian_blur(float *input, float *output, int width, int height, float *kernel, int kernel_size) {
+    "rgb_to_grayscale": """__global__ void rgb_to_grayscale(const float *input, float *output, int height, int width) {
         int x = blockIdx.x * blockDim.x + threadIdx.x;
         int y = blockIdx.y * blockDim.y + threadIdx.y;
-        
+        if (x < width && y < height) {
+            int idx = y * width + x;
+            output[idx] = 0.2989f * input[3 * idx] + 0.5870f * input[3 * idx + 1] + 0.1140f * input[3 * idx + 2];
+        }
+    }""",
+    
+    "gaussian_blur": """__global__ void gaussian_blur(const float *input, float *output, int width, int height, const float *kernel, int kernel_size) {
+        int x = blockIdx.x * blockDim.x + threadIdx.x;
+        int y = blockIdx.y * blockDim.y + threadIdx.y;
         if (x < width && y < height) {
             float sum = 0.0f;
             int half_k = kernel_size / 2;
@@ -213,6 +219,7 @@ kernels = {
             output[y * width + x] = sum;
         }
     }""",
+
 }
 
 def get_prebuilt_kernels():

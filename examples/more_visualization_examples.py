@@ -99,7 +99,7 @@ class GpuKernelComparator:
 if __name__ == "__main__":
     try:
         kernel_comparator = GpuKernelComparator()
-        rows, cols = 1000, 1000
+        rows, cols = 10, 10
         plot_execution_times(kernel_comparator=kernel_comparator, rows=rows, cols=cols)  # Plot execution times
     except Exception as e:
         print(f"Error during execution: {e}")
